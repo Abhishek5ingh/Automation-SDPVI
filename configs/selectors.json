@@ -1,0 +1,26 @@
+{
+  "login": {
+    "username_input": "#username",
+    "password_input": "#password",
+    "login_button": "button[type=\"submit\"]",
+    "error_banner": ".alert.alert-error"
+  },
+  "otp": {
+    "otp_input": "input[name=\"otp\"]",
+    "submit_button": "button[type=\"submit\"]",
+    "resend_link": "a.resend"
+  },
+  "summary": {
+    "account_rows": "section.accounts tbody tr",
+    "account_name": ".account-name",
+    "account_number": ".account-number",
+    "account_balance": ".account-balance",
+    "summary_section": "section.account-summary"
+  },
+  "statements": {
+    "tab_selector": "a[href*=\"statements\"]",
+    "statement_rows": "table.statements tbody tr",
+    "download_button": "button.download",
+    "date_cell": "td.date"
+  }
+}
