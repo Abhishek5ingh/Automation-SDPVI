@@ -43,6 +43,7 @@ LOGIN_CONFIG = {
 
 
 def parse_reports(cli_reports: List[str]) -> List[str]:
+    """Merge CLI report names with .env defaults while preserving order."""
     env_reports = [part.strip() for part in os.getenv("REPORTS", "").split("|") if part.strip()]
     combined = [*cli_reports, *env_reports]
     if combined:
@@ -51,6 +52,7 @@ def parse_reports(cli_reports: List[str]) -> List[str]:
 
 
 def build_search_url(query: str) -> str:
+    """Convert a dataset title into a portal-specific search URL."""
     encoded = quote_plus(query)
     if "{query}" in SEARCH_TEMPLATE:
         return SEARCH_TEMPLATE.replace("{query}", encoded)
@@ -58,15 +60,18 @@ def build_search_url(query: str) -> str:
 
 
 def sanitize_filename(label: str) -> str:
+    """Slugify dataset titles so saved files have filesystem-safe names."""
     slug = re.sub(r"[^a-zA-Z0-9]+", "-", label).strip("-")
     return slug.lower() or "report"
 
 
 def ensure_output_dir() -> None:
+    """Create the output directory tree if it does not already exist."""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 async def perform_login(page: Page) -> bool:
+    """Optionally authenticate on the portal when login settings are provided."""
     if not LOGIN_CONFIG.get("url"):
         return False
 
@@ -96,6 +101,7 @@ async def perform_login(page: Page) -> bool:
 
 
 def build_fuzzy_regex(title: str) -> re.Pattern:
+    """Generate a loose regex that tolerates partial matches in link text."""
     tokens = [re.escape(token) for token in title.split() if token]
     if not tokens:
         return re.compile(re.escape(title), re.IGNORECASE)
@@ -104,6 +110,7 @@ def build_fuzzy_regex(title: str) -> re.Pattern:
 
 
 async def find_dataset_link(page: Page, report_title: str):
+    """Return a locator pointing at the best matching dataset anchor tag."""
     exact_regex = re.compile(re.escape(report_title), re.IGNORECASE)
     locator = page.locator("a").filter(has_text=exact_regex).first
     if await locator.count() > 0:
@@ -118,6 +125,7 @@ async def find_dataset_link(page: Page, report_title: str):
 
 
 async def open_dataset(page: Page, report_title: str) -> None:
+    """Click the located dataset entry and wait for its detail page to load."""
     await page.wait_for_timeout(1000)
     locator = await find_dataset_link(page, report_title)
     async with page.expect_navigation(wait_until="domcontentloaded", timeout=NAVIGATION_TIMEOUT_MS):
@@ -126,6 +134,7 @@ async def open_dataset(page: Page, report_title: str) -> None:
 
 
 async def search_for_report(page: Page, report_title: str) -> None:
+    """Navigate to the search results for a title, then open the dataset page."""
     search_url = build_search_url(report_title)
     await page.goto(search_url, wait_until="domcontentloaded", timeout=NAVIGATION_TIMEOUT_MS)
     await page.wait_for_load_state("networkidle", timeout=NAVIGATION_TIMEOUT_MS)
@@ -133,6 +142,7 @@ async def search_for_report(page: Page, report_title: str) -> None:
 
 
 def append_date_to_filename(filename: str) -> str:
+    """Stamp filenames with the current date to avoid accidental overwrites."""
     date_suffix = datetime.now().strftime("%Y%m%d")
     path = Path(filename)
     stem = path.stem or sanitize_filename("report")
@@ -141,6 +151,7 @@ def append_date_to_filename(filename: str) -> str:
 
 
 async def download_resource(page: Page, report_title: str) -> Path:
+    """Click the first matching resource link and persist the resulting download."""
     locator = page.locator(RESOURCE_SELECTOR)
     if await locator.count() == 0:
         raise RuntimeError("No downloadable resources detected")
@@ -156,6 +167,7 @@ async def download_resource(page: Page, report_title: str) -> Path:
 
 
 async def process_report(page: Page, report_title: str) -> Optional[Path]:
+    """Search, open, and download a single dataset; return the saved path."""
     print(f"\n[report] Processing: {report_title}")
     await search_for_report(page, report_title)
     path = await download_resource(page, report_title)
@@ -164,6 +176,7 @@ async def process_report(page: Page, report_title: str) -> Optional[Path]:
 
 
 async def run_automation(reports: List[str], headless: bool) -> None:
+    """Drive the full workflow for all requested datasets and summarize failures."""
     ensure_output_dir()
     async with async_playwright() as p:
         browser: Browser = await p.chromium.launch(headless=headless)
@@ -193,6 +206,7 @@ async def run_automation(reports: List[str], headless: bool) -> None:
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
+    """Set up CLI arguments for report names and headed/headless overrides."""
     parser = argparse.ArgumentParser(
         description="Search datasets on a portal and download available CSV/XLS resources using Playwright.",
     )
@@ -206,6 +220,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    """Entry point: parse args, resolve settings, and launch the async flow."""
     parser = build_arg_parser()
     args = parser.parse_args()
     reports = parse_reports(args.reports)
