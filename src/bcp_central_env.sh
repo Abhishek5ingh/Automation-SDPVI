@@ -1,5 +1,5 @@
 # Dataset titles to fetch (pipe-separated). Leave empty to use defaults.
-REPORTS=
+REPORTS=Pune Stormwater Drains|Bengaluru Stormwater Drains Maps
 
 # Browser behavior and timeouts
 HEADLESS=true
@@ -9,9 +9,10 @@ NAVIGATION_TIMEOUT_MS=45000
 OUTPUT_DIR=./output
 
 # Portal configuration
-PORTAL_BASE_URL=https://www.data.gov.in/
-PORTAL_SEARCH_URL=https://www.data.gov.in/search?query={query}
-RESOURCE_SELECTOR=a[href$=".csv"], a[href$=".xls"], a[href$=".xlsx"], a.download-resource
+PORTAL_BASE_URL=https://data.opencity.in/
+PORTAL_SEARCH_URL=https://data.opencity.in/dataset?q={query}
+RESOURCE_SELECTOR=a[href$=".csv"], a[href$=".xls"], a[href$=".xlsx"], a[href$=".geojson"], a[href$=".kml"], a[href$=".kmz"], a.download-resource
+RESOURCE_PRE_CLICK_SELECTOR=.resource-item .dropdown-toggle
 
 # Optional login configuration (fill all fields to enable)
 PORTAL_LOGIN_URL=
