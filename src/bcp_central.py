@@ -28,8 +28,10 @@ SEARCH_TEMPLATE = os.getenv(
 )
 RESOURCE_SELECTOR = os.getenv(
     "RESOURCE_SELECTOR",
-    'a[href$=".csv"], a[href$=".xls"], a[href$=".xlsx"], a.download-resource',
+    'a[href$=".csv"], a[href$=".xls"], a[href$=".xlsx"], '
+    'a[href$=".geojson"], a[href$=".kml"], a[href$=".kmz"], a.download-resource',
 )
+RESOURCE_PRE_CLICK_SELECTOR = os.getenv("RESOURCE_PRE_CLICK_SELECTOR")
 
 LOGIN_CONFIG = {
     "url": os.getenv("PORTAL_LOGIN_URL"),
@@ -156,8 +158,18 @@ async def download_resource(page: Page, report_title: str) -> Path:
     if await locator.count() == 0:
         raise RuntimeError("No downloadable resources detected")
 
+    if RESOURCE_PRE_CLICK_SELECTOR:
+        toggle_locator = page.locator(RESOURCE_PRE_CLICK_SELECTOR)
+        if await toggle_locator.count() > 0:
+            await toggle_locator.first.click(timeout=NAVIGATION_TIMEOUT_MS)
+
+    target = locator.first
+    handle = await target.element_handle()
+    if handle is None:
+        raise RuntimeError("Download link became unavailable before clicking")
+
     async with page.expect_download(timeout=NAVIGATION_TIMEOUT_MS) as download_info:
-        await locator.first.click(timeout=NAVIGATION_TIMEOUT_MS)
+        await handle.evaluate("el => el.click()")
     download = await download_info.value
     suggested = download.suggested_filename or f"{sanitize_filename(report_title)}.dat"
     dated_name = append_date_to_filename(suggested)
