@@ -1,7 +1,9 @@
 import argparse
 import asyncio
+import logging
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 from urllib.parse import quote_plus
@@ -18,6 +20,7 @@ DEFAULT_REPORTS = [
 
 ROOT_DIR = Path(__file__).parent.resolve()
 OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", ROOT_DIR / "downloads")).resolve()
+LOG_DIR = Path(os.getenv("LOG_DIR", ROOT_DIR / "logs")).resolve()
 HEADLESS_ENV = os.getenv("HEADLESS", "true").lower() != "false"
 NAVIGATION_TIMEOUT_MS = int(os.getenv("NAVIGATION_TIMEOUT_MS", "45000"))
 BASE_URL = os.getenv("PORTAL_BASE_URL", "https://www.data.gov.in/")
@@ -31,6 +34,7 @@ RESOURCE_SELECTOR = os.getenv(
     'a[href$=".geojson"], a[href$=".kml"], a[href$=".kmz"], a.download-resource',
 )
 RESOURCE_PRE_CLICK_SELECTOR = os.getenv("RESOURCE_PRE_CLICK_SELECTOR")
+logger = logging.getLogger("dataset_downloader")
 
 LOGIN_CONFIG = {
     "url": os.getenv("PORTAL_LOGIN_URL"),
@@ -41,6 +45,25 @@ LOGIN_CONFIG = {
     "submit_selector": os.getenv("PORTAL_SUBMIT_SELECTOR"),
     "post_login_selector": os.getenv("PORTAL_POST_LOGIN_SELECTOR"),
 }
+
+
+def setup_logging() -> Path:
+    """Initialize dual console/file logging and return the log file path."""
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    log_path = LOG_DIR / f"run-{timestamp}.log"
+    handlers = [
+        logging.FileHandler(log_path, encoding="utf-8"),
+        logging.StreamHandler(),
+    ]
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        handlers=handlers,
+        force=True,
+    )
+    logger.info("Log file initialized at %s", log_path)
+    return log_path
 
 
 def parse_reports(cli_reports: List[str]) -> List[str]:
@@ -82,11 +105,11 @@ async def perform_login(page: Page) -> bool:
         LOGIN_CONFIG.get("submit_selector"),
     ]
     if any(not selector for selector in required):
-        print("[login] Skipped: missing selectors in configuration")
+        logger.warning("[login] Skipped: missing selectors in configuration")
         return False
 
     if not LOGIN_CONFIG.get("username") or not LOGIN_CONFIG.get("password"):
-        print("[login] Skipped: missing credentials")
+        logger.warning("[login] Skipped: missing credentials")
         return False
 
     await page.goto(LOGIN_CONFIG["url"], wait_until="domcontentloaded", timeout=NAVIGATION_TIMEOUT_MS)
@@ -97,7 +120,7 @@ async def perform_login(page: Page) -> bool:
     await nav.value
     if LOGIN_CONFIG.get("post_login_selector"):
         await page.wait_for_selector(LOGIN_CONFIG["post_login_selector"], timeout=NAVIGATION_TIMEOUT_MS)
-    print("[login] Successful")
+    logger.info("[login] Successful")
     return True
 
 
@@ -180,10 +203,10 @@ async def download_resource(page: Page, report_title: str) -> Path:
 
 async def process_report(page: Page, report_title: str) -> Optional[Path]:
     """Search, open, and download a single dataset; return the saved path."""
-    print(f"\n[report] Processing: {report_title}")
+    logger.info("[report] Processing: %s", report_title)
     await search_for_report(page, report_title)
     path = await download_resource(page, report_title)
-    print(f"[report] Saved to {path}")
+    logger.info("[report] Saved to %s", path)
     return path
 
 
@@ -205,16 +228,16 @@ async def run_automation(reports: List[str], headless: bool) -> None:
                 await process_report(page, report)
             except Exception as exc:
                 failures.append((report, str(exc)))
-                print(f"[report] Failed {report}: {exc}")
+                logger.exception("[report] Failed %s: %s", report, exc)
 
         await browser.close()
 
         if failures:
-            print(f"\nCompleted with {len(failures)} failure(s):")
+            logger.error("Completed with %s failure(s)", len(failures))
             for name, msg in failures:
-                print(f" - {name}: {msg}")
+                logger.error(" - %s: %s", name, msg)
             raise SystemExit(1)
-        print("\nAll requested reports downloaded successfully.")
+        logger.info("All requested reports downloaded successfully.")
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -235,12 +258,20 @@ def main() -> None:
     """Entry point: parse args, resolve settings, and launch the async flow."""
     parser = build_arg_parser()
     args = parser.parse_args()
+    log_path = setup_logging()
+    logger.info("Log file located at %s", log_path)
     reports = parse_reports(args.reports)
     if not reports:
+        logger.error("No reports supplied via CLI or configuration.")
         raise SystemExit("No reports supplied via CLI or configuration.")
 
     headless = HEADLESS_ENV and not args.headed
-    asyncio.run(run_automation(reports, headless=headless))
+    logger.info("Starting automation | headless=%s | reports=%s", headless, reports)
+    try:
+        asyncio.run(run_automation(reports, headless=headless))
+    except Exception:
+        logger.exception("Automation run failed")
+        raise
 
 
 if __name__ == "__main__":
