@@ -6,7 +6,7 @@ HEADLESS=true
 NAVIGATION_TIMEOUT_MS=45000
 
 # Download destination
-OUTPUT_DIR=./output
+OUTPUT_DIR=./downloads
 
 # Portal configuration
 PORTAL_BASE_URL=https://data.opencity.in/
