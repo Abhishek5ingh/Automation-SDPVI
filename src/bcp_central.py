@@ -5,7 +5,6 @@ import re
 from pathlib import Path
 from typing import List, Optional
 from urllib.parse import quote_plus
-from datetime import datetime
 
 from dotenv import load_dotenv
 from playwright.async_api import Browser, Page, async_playwright
@@ -18,7 +17,7 @@ DEFAULT_REPORTS = [
 ]
 
 ROOT_DIR = Path(__file__).parent.resolve()
-OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", ROOT_DIR / "output")).resolve()
+OUTPUT_DIR = Path(os.getenv("OUTPUT_DIR", ROOT_DIR / "downloads")).resolve()
 HEADLESS_ENV = os.getenv("HEADLESS", "true").lower() != "false"
 NAVIGATION_TIMEOUT_MS = int(os.getenv("NAVIGATION_TIMEOUT_MS", "45000"))
 BASE_URL = os.getenv("PORTAL_BASE_URL", "https://www.data.gov.in/")
@@ -143,13 +142,13 @@ async def search_for_report(page: Page, report_title: str) -> None:
     await open_dataset(page, report_title)
 
 
-def append_date_to_filename(filename: str) -> str:
-    """Stamp filenames with the current date to avoid accidental overwrites."""
-    date_suffix = datetime.now().strftime("%Y%m%d")
-    path = Path(filename)
-    stem = path.stem or sanitize_filename("report")
-    suffix = path.suffix
-    return f"{stem}-{date_suffix}{suffix}"
+def build_destination_filename(suggested: str, fallback_title: str) -> str:
+    """Sanitize the suggested filename while preserving its extension."""
+    path = Path(suggested)
+    suffix = path.suffix or ""
+    stem_source = path.stem or fallback_title
+    safe_stem = sanitize_filename(stem_source)
+    return f"{safe_stem}{suffix or '.dat'}"
 
 
 async def download_resource(page: Page, report_title: str) -> Path:
@@ -172,8 +171,9 @@ async def download_resource(page: Page, report_title: str) -> Path:
         await handle.evaluate("el => el.click()")
     download = await download_info.value
     suggested = download.suggested_filename or f"{sanitize_filename(report_title)}.dat"
-    dated_name = append_date_to_filename(suggested)
-    destination = OUTPUT_DIR / dated_name
+    destination = OUTPUT_DIR / build_destination_filename(suggested, report_title)
+    if destination.exists():
+        destination.unlink()
     await download.save_as(destination)
     return destination
 
