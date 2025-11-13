@@ -31,9 +31,12 @@ SEARCH_TEMPLATE = os.getenv(
 RESOURCE_SELECTOR = os.getenv(
     "RESOURCE_SELECTOR",
     'a[href$=".csv"], a[href$=".xls"], a[href$=".xlsx"], '
-    'a[href$=".geojson"], a[href$=".kml"], a[href$=".kmz"], a.download-resource',
+    'a[href$=".geojson"], a[href$=".kml"], a[href$=".kmz"], '
+    'a.download-resource, a.btn.btn-primary[href]',
 )
 RESOURCE_PRE_CLICK_SELECTOR = os.getenv("RESOURCE_PRE_CLICK_SELECTOR")
+SEARCH_INPUT_SELECTOR = os.getenv("SEARCH_INPUT_SELECTOR")
+SEARCH_SUBMIT_SELECTOR = os.getenv("SEARCH_SUBMIT_SELECTOR")
 logger = logging.getLogger("dataset_downloader")
 
 LOGIN_CONFIG = {
@@ -159,9 +162,20 @@ async def open_dataset(page: Page, report_title: str) -> None:
 
 async def search_for_report(page: Page, report_title: str) -> None:
     """Navigate to the search results for a title, then open the dataset page."""
-    search_url = build_search_url(report_title)
-    await page.goto(search_url, wait_until="domcontentloaded", timeout=NAVIGATION_TIMEOUT_MS)
-    await page.wait_for_load_state("networkidle", timeout=NAVIGATION_TIMEOUT_MS)
+    if SEARCH_INPUT_SELECTOR:
+        await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=NAVIGATION_TIMEOUT_MS)
+        await page.wait_for_selector(SEARCH_INPUT_SELECTOR, timeout=NAVIGATION_TIMEOUT_MS)
+        await page.fill(SEARCH_INPUT_SELECTOR, report_title)
+        if SEARCH_SUBMIT_SELECTOR:
+            await page.click(SEARCH_SUBMIT_SELECTOR, timeout=NAVIGATION_TIMEOUT_MS)
+        else:
+            await page.keyboard.press("Enter")
+        await page.wait_for_load_state("domcontentloaded", timeout=NAVIGATION_TIMEOUT_MS)
+        await page.wait_for_load_state("networkidle", timeout=NAVIGATION_TIMEOUT_MS)
+    else:
+        search_url = build_search_url(report_title)
+        await page.goto(search_url, wait_until="domcontentloaded", timeout=NAVIGATION_TIMEOUT_MS)
+        await page.wait_for_load_state("networkidle", timeout=NAVIGATION_TIMEOUT_MS)
     await open_dataset(page, report_title)
 
 
